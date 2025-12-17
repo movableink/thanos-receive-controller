@@ -1,3 +1,12 @@
+# movable-ink fork
+
+This is a fork of the `thanos-receive-controller` tool. It has the following changes:
+
+* `annotate-pods-label` - flag to enable the label pods to be annotated with current timestamp by the controller on a hashring change. Via: https://github.com/observatorium/thanos-receive-controller/pull/126
+* `unique-statefulset-pod-labels` - flag to use kubernetes list API call to get the list of statefulset pods rather than individual get API calls
+* `resync-period` - flag to configure the resync period. It is the number of seconds in the control loop (defaults to 5 minutes)
+* A few extra logging messages: https://github.com/observatorium/thanos-receive-controller/pull/131
+
 # Thanos Receive Controller
 
 The Thanos Receive Controller configures multiple hashrings of Thanos receivers running as StatefulSets on Kubernetes.  
