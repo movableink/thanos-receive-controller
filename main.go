@@ -749,32 +749,34 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 				}
 
 				for k, pod := range podsInStatefulset.Items {
+					deepCopyPod := pod.DeepCopy()
+
 					if c.options.allowDynamicScaling {
 						if kerrors.IsNotFound(err) {
 							continue
 						}
 						// Do not add a replica to the hashring if pod is not Ready.
-						if !podutils.IsPodReady(&pod) {
-							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", pod.Name)
+						if !podutils.IsPodReady(deepCopyPod) {
+							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", deepCopyPod.Name)
 							continue
 						}
 
 						if pod.GetDeletionTimestamp() != nil {
 							// pod is terminating, do not add to hashring
-							level.Info(c.logger).Log("msg", "pod is terminating, do not add to hashring", "pod", pod.GetName())
+							level.Info(c.logger).Log("msg", "pod is terminating, do not add to hashring", "pod", deepCopyPod.GetName())
 							continue
 						}
 
-						if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+						if deepCopyPod.ObjectMeta.DeletionTimestamp != nil && (deepCopyPod.Status.Phase == corev1.PodRunning || deepCopyPod.Status.Phase == corev1.PodPending) {
 							// Pod is terminating, do not add it to the hashring.
 							continue
 						}
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
-					endpoint := *c.populateEndpoint(sts, k, err, &pod)
+					endpoint := *c.populateEndpoint(sts, k, err, deepCopyPod)
 					if pod.GetDeletionTimestamp() != nil {
-						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", pod.GetName())
+						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
 					endpoints = append(endpoints, endpoint)
 
