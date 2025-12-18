@@ -749,6 +749,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 				}
 
 				for k, pod := range podsInStatefulset.Items {
+					level.Info(c.logger).Log("msg", "start with pod", "pod", pod.GetName())
 					deepCopyPod := pod.DeepCopy()
 
 					if c.options.allowDynamicScaling {
@@ -772,8 +773,11 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 							continue
 						}
 					}
+					level.Info(c.logger).Log("msg", "middle with pod", "pod", pod.GetName())
 					// If cluster domain is empty string we don't want dot after svc.
-
+					if deepCopyPod.GetDeletionTimestamp() != nil {
+						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
+					}
 					endpoint := *c.populateEndpoint(sts, k, err, deepCopyPod)
 					if deepCopyPod.GetDeletionTimestamp() != nil {
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
@@ -781,8 +785,10 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
+					level.Info(c.logger).Log("msg", "end with pod", "pod", pod.GetName())
 				}
 			} else {
+				level.Info(c.logger).Log("msg", "using original hashring method")
 				for i := 0; i < int(*sts.Spec.Replicas); i++ {
 					podName := fmt.Sprintf("%s-%d", sts.Name, i)
 					pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
