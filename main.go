@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -748,7 +749,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					level.Error(c.logger).Log("msg", "failed to list pods belonging to statefulset", "statefulset", sts.Name, "err", err)
 				}
 
-				for k, pod := range podsInStatefulset.Items {
+				for _, pod := range podsInStatefulset.Items {
 					level.Info(c.logger).Log("msg", "start with pod", "pod", pod.GetName())
 					deepCopyPod := pod.DeepCopy()
 
@@ -778,7 +779,13 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					if deepCopyPod.GetDeletionTimestamp() != nil {
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
-					endpoint := *c.populateEndpoint(sts, k, err, deepCopyPod)
+
+					podIndex, podIndexErr := strconv.Atoi(pod.GetLabels()["apps.kubernetes.io/pod-index"])
+					if podIndexErr != nil {
+						level.Error(c.logger).Log("msg", "unable to get the index of the pod", "pod", pod.GetName(), "err", podIndexErr)
+					}
+
+					endpoint := *c.populateEndpoint(sts, podIndex, err, deepCopyPod)
 					if deepCopyPod.GetDeletionTimestamp() != nil {
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
