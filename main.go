@@ -761,7 +761,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 
 						if pod.GetDeletionTimestamp() != nil {
 							// pod is terminating, do not add to hashring
-							level.Info(c.logger).Log("msg", "pod is terminating, do not add to hashring", pod.GetName())
+							level.Info(c.logger).Log("msg", "pod is terminating, do not add to hashring", "pod", pod.GetName())
 							continue
 						}
 
@@ -773,6 +773,9 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					// If cluster domain is empty string we don't want dot after svc.
 
 					endpoint := *c.populateEndpoint(sts, k, err, &pod)
+					if pod.GetDeletionTimestamp() != nil {
+						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", pod.GetName())
+					}
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
