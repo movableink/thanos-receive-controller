@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -748,7 +749,9 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					level.Error(c.logger).Log("msg", "failed to list pods belonging to statefulset", "statefulset", sts.Name, "err", err)
 				}
 
-				for k, pod := range podsInStatefulset.Items {
+				statefulsetPods := orderStatefulsetPods(podsInStatefulset.Items)
+
+				for k, pod := range statefulsetPods {
 					if c.options.allowDynamicScaling {
 						if kerrors.IsNotFound(err) {
 							continue
@@ -948,6 +951,25 @@ func hashAsMetricValue(data []byte) float64 {
 	copy(bytes, smallSum)
 
 	return float64(binary.LittleEndian.Uint64(bytes))
+}
+
+// orderStatefulsetPods takes a list of pods in a statefulset
+// and orders them in a slice
+func orderStatefulsetPods(statfulSetPods []v1.Pod) []v1.Pod {
+	orderedStatefulsetPods := make([]v1.Pod, len(statfulSetPods))
+
+	for _, pod := range statfulSetPods {
+
+		indexString, labelPresent := pod.GetLabels()["apps.kubernetes.io/pod-index"]
+		if labelPresent {
+			index, _ := strconv.Atoi(indexString)
+			orderedStatefulsetPods[index] = pod
+		} else {
+			return statfulSetPods
+		}
+	}
+
+	return orderedStatefulsetPods
 }
 
 // queue is a non-blocking queue.
