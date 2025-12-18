@@ -749,7 +749,9 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					level.Error(c.logger).Log("msg", "failed to list pods belonging to statefulset", "statefulset", sts.Name, "err", err)
 				}
 
-				for _, pod := range podsInStatefulset.Items {
+				statefulsetPods := orderStatefulsetPods(podsInStatefulset.Items)
+
+				for k, pod := range statefulsetPods {
 					level.Info(c.logger).Log("msg", "start with pod", "pod", pod.GetName())
 					deepCopyPod := pod.DeepCopy()
 
@@ -780,12 +782,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
 
-					podIndex, podIndexErr := strconv.Atoi(pod.GetLabels()["apps.kubernetes.io/pod-index"])
-					if podIndexErr != nil {
-						level.Error(c.logger).Log("msg", "unable to get the index of the pod", "pod", pod.GetName(), "err", podIndexErr)
-					}
-
-					endpoint := *c.populateEndpoint(sts, podIndex, err, deepCopyPod)
+					endpoint := *c.populateEndpoint(sts, k, err, deepCopyPod)
 					if deepCopyPod.GetDeletionTimestamp() != nil {
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
@@ -965,6 +962,20 @@ func (c *controller) annotatePods(ctx context.Context) {
 			level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
 		}
 	}
+}
+
+// orderStatefulsetPods takes a list of pods in a statefulset
+// and orders them in a slice
+func orderStatefulsetPods(statfulSetPods []v1.Pod) []v1.Pod {
+	orderedStatefulsetPods := make([]v1.Pod, len(statfulSetPods))
+
+	for _, pod := range statfulSetPods {
+		indexString := pod.GetLabels()["apps.kubernetes.io/pod-index"]
+		index, _ := strconv.Atoi(indexString)
+		orderedStatefulsetPods[index] = pod
+	}
+
+	return orderedStatefulsetPods
 }
 
 // hashAsMetricValue generates metric value from hash of data.
