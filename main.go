@@ -761,7 +761,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 							continue
 						}
 
-						if pod.GetDeletionTimestamp() != nil {
+						if deepCopyPod.GetDeletionTimestamp() != nil {
 							// pod is terminating, do not add to hashring
 							level.Info(c.logger).Log("msg", "pod is terminating, do not add to hashring", "pod", deepCopyPod.GetName())
 							continue
@@ -775,7 +775,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					// If cluster domain is empty string we don't want dot after svc.
 
 					endpoint := *c.populateEndpoint(sts, k, err, deepCopyPod)
-					if pod.GetDeletionTimestamp() != nil {
+					if deepCopyPod.GetDeletionTimestamp() != nil {
 						level.Info(c.logger).Log("msg", "pod endpoint mistakenly got added even though it is terminating", "pod", deepCopyPod.GetName())
 					}
 					endpoints = append(endpoints, endpoint)
