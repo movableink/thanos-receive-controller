@@ -819,6 +819,10 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 }
 
 func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod) *receive.Endpoint {
+	if pod.GetDeletionGracePeriodSeconds() != nil {
+		level.Info(c.logger).Log("msg", "accidentally added terminating pod", "pod", pod.GetName())
+	}
+
 	// If cluster domain is empty string we don't want dot after svc.
 	clusterDomain := ""
 	if c.options.clusterDomain != "" {
