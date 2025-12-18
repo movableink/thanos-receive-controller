@@ -716,6 +716,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 
 						if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
 							// Pod is terminating, do not add it to the hashring.
+							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
 							continue
 						}
 					}
