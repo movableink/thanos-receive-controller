@@ -6,6 +6,7 @@ This is a fork of the `thanos-receive-controller` tool. It has the following cha
 * `unique-statefulset-pod-labels` - flag to use kubernetes list API call to get the list of statefulset pods rather than individual get API calls
 * `resync-period` - flag to configure the resync period. It is the number of seconds in the control loop (defaults to 5 minutes)
 * A few extra logging messages: https://github.com/observatorium/thanos-receive-controller/pull/131
+* `skip-terminating-pods` - a boolean flag to configure whether or not pods in a terminating status should be included in the hashring
 
 # Thanos Receive Controller
 

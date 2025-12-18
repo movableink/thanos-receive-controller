@@ -82,6 +82,7 @@ type CmdConfig struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	ResyncPeriod               time.Duration
+	skipTerminatingPods        bool
 }
 
 func parseFlags() CmdConfig {
@@ -107,6 +108,7 @@ func parseFlags() CmdConfig {
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
 	flag.BoolVar(&config.uniqueStatefulSetPodLabels, "unique-statefulset-pod-labels", false, "Get list of pods in statefulset using pod spec labels")
 	flag.DurationVar(&config.ResyncPeriod, "resync-period", defaultResyncPeriod, "The default resync period")
+	flag.BoolVar(&config.skipTerminatingPods, "skip-terminating-pods", false, "Skips including pods in terminating status from being included in the hashring")
 	flag.Parse()
 
 	return config
@@ -172,6 +174,7 @@ func main() {
 			podAzAnnotationKey:         config.podAzAnnotationKey,
 			uniqueStatefulSetPodLabels: config.uniqueStatefulSetPodLabels,
 			resyncPeriod:               config.ResyncPeriod,
+			skipTerminatingPods:        config.skipTerminatingPods,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -361,6 +364,7 @@ type options struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	resyncPeriod               time.Duration
+	skipTerminatingPods        bool
 }
 
 type controller struct {
@@ -702,6 +706,11 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			if c.options.allowOnlyReadyReplicas {
+				if c.options.skipTerminatingPods {
+					if pod.GetDeletionTimestamp() != nil {
+						return false, nil
+					}
+				}
 				if podutils.IsPodReady(pod) {
 					return true, nil
 				}
