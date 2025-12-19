@@ -726,10 +726,16 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 							continue
 						}
 
-						if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-							// Pod is terminating, do not add it to the hashring.
-							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
-							continue
+						if pod.ObjectMeta.DeletionTimestamp != nil {
+							if (time.Now().Unix() - pod.ObjectMeta.DeletionTimestamp.Time.Unix()) > int64(c.options.waitToDrain.Seconds()) {
+								if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+									// Pod is terminating, do not add it to the hashring.
+									level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
+									continue
+								}
+							} else {
+								level.Warn(c.logger).Log("msg", "keeping pod in the hashring even though it is terminating because it is draining", "pod", pod.Name)
+							}
 						}
 					}
 					// If cluster domain is empty string we don't want dot after svc.
@@ -754,11 +760,15 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 							continue
 						}
 
-						if (time.Now().Unix() - pod.ObjectMeta.DeletionTimestamp.Time.Unix()) > int64(c.options.waitToDrain.Seconds()) {
-							if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-								// Pod is terminating, do not add it to the hashring.
-								level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
-								continue
+						if pod.ObjectMeta.DeletionTimestamp != nil {
+							if (time.Now().Unix() - pod.ObjectMeta.DeletionTimestamp.Time.Unix()) > int64(c.options.waitToDrain.Seconds()) {
+								if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+									// Pod is terminating, do not add it to the hashring.
+									level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
+									continue
+								}
+							} else {
+								level.Warn(c.logger).Log("msg", "keeping pod in the hashring even though it is terminating because it is draining", "pod", pod.Name)
 							}
 						}
 					}
