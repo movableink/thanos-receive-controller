@@ -83,6 +83,7 @@ type CmdConfig struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	ResyncPeriod               time.Duration
+	skipExtraWaitForNewPod     bool
 }
 
 func parseFlags() CmdConfig {
@@ -108,6 +109,7 @@ func parseFlags() CmdConfig {
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
 	flag.BoolVar(&config.uniqueStatefulSetPodLabels, "unique-statefulset-pod-labels", false, "Get list of pods in statefulset using pod spec labels")
 	flag.DurationVar(&config.ResyncPeriod, "resync-period", defaultResyncPeriod, "The default resync period")
+	flag.BoolVar(&config.skipExtraWaitForNewPod, "skip-extra-wait-for-new-pod", false, "Skip including an extra wait when there is a new pod")
 	flag.Parse()
 
 	return config
@@ -173,6 +175,7 @@ func main() {
 			podAzAnnotationKey:         config.podAzAnnotationKey,
 			uniqueStatefulSetPodLabels: config.uniqueStatefulSetPodLabels,
 			resyncPeriod:               config.ResyncPeriod,
+			skipExtraWaitForNewPod:     config.skipExtraWaitForNewPod,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -362,6 +365,7 @@ type options struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	resyncPeriod               time.Duration
+	skipExtraWaitForNewPod     bool
 }
 
 type controller struct {
@@ -604,19 +608,21 @@ func (c *controller) sync(ctx context.Context) {
 			matchingStatefulSet = true
 		}
 
-		// If there's an increase in replicas we poll for the new replicas to be ready
-		if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
-			// Iterate over new replicas to wait until they are running
-			for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
-				start := time.Now()
-				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+		if !c.options.skipExtraWaitForNewPod {
+			// If there's an increase in replicas we poll for the new replicas to be ready
+			if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
+				// Iterate over new replicas to wait until they are running
+				for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
+					start := time.Now()
+					podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
-				if err := c.waitForPod(ctx, podName); err != nil {
-					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-					return
+					if err := c.waitForPod(ctx, podName); err != nil {
+						level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
+						return
+					}
+
+					level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 				}
-
-				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 			}
 		}
 
