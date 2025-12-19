@@ -492,21 +492,9 @@ func (c *controller) run(ctx context.Context, stop <-chan struct{}) error {
 	_, err := c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
-		UpdateFunc: func(_, obj interface{}) {
-			// skip reconciliation of the generated configmap was just updated because
-			// that thanos-receive-controller will update that configmap and it would result
-			// in an extra reconciliation loop
-			cm, ok := obj.(*v1.ConfigMap)
-			if ok {
-				level.Info(c.logger).Log("msg", "ConfigMap updated", "event", "update", "configmap", cm.Name)
-				if cm.Name != c.options.configMapGeneratedName {
-					c.queue.add()
-				}
-			} else {
-				c.queue.add()
-			}
-		},
-	})
+		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
+	},
+	)
 	if err != nil {
 		return err
 	}
