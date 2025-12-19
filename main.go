@@ -869,6 +869,7 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 	}
 
 	if gcm.Data[c.options.fileName] == cm.Data[c.options.fileName] {
+		level.Info(c.logger).Log("msg", "skipping updating hashring, since there was no content update", "configMap", cm.GetName())
 		return nil
 	}
 
