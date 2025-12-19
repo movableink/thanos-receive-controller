@@ -877,6 +877,8 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 	if err != nil {
 		c.configmapChangeErrors.WithLabelValues(update).Inc()
 		return err
+	} else {
+		level.Info(c.logger).Log("msg", "updated configmap with latest hashring", "configMap", cm.GetName())
 	}
 
 	c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
