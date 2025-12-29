@@ -299,11 +299,12 @@ func TestController(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 			}
-			klient := fake.NewSimpleClientset()
-			cleanUp := setupController(ctx, t, klient, opts)
-			defer cleanUp()
+			klient := fake.NewClientset()
 
 			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+
+			cleanUp := setupController(ctx, t, klient, opts)
+			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
@@ -379,7 +380,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 
 			cm := createInitialResources(ctx, t, klient, opts,
 				originalHashrings,
@@ -778,11 +779,12 @@ func TestControllerWithAzAware(t *testing.T) {
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
 			}
-			klient := fake.NewSimpleClientset()
-			cleanUp := setupController(ctx, t, klient, opts)
-			defer cleanUp()
+			klient := fake.NewClientset()
 
 			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+
+			cleanUp := setupController(ctx, t, klient, opts)
+			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
@@ -868,7 +870,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 
 			cm := createInitialResources(ctx, t, klient, opts,
 				originalHashrings,
