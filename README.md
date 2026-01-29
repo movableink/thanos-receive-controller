@@ -7,7 +7,8 @@ This is a fork of the `thanos-receive-controller` tool. It has the following cha
 * `resync-period` - flag to configure the resync period. It is the number of seconds in the control loop (defaults to 5 minutes)
 * A few extra logging messages: https://github.com/observatorium/thanos-receive-controller/pull/131
 * `skip-extra-wait-for-new-pod` - flag to allow skipping an unnecessary wait condition
-* `wait-to-drain` - flat to allow waiting a specific amount of time before draining a pod from the hashring configmap
+* `wait-to-drain` - flag to allow waiting a specific amount of time before draining a pod from the hashring configmap
+* `prefer-same-zone` - flag to allow including the `prefer_same_zone` in the hashring config. If this is enabled, this will instruct `thanos-receive` to replicate data to pods in the same zone
 
 # Thanos Receive Controller
 

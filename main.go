@@ -86,6 +86,7 @@ type CmdConfig struct {
 	ResyncPeriod               time.Duration
 	skipExtraWaitForNewPod     bool
 	waitToDrain                time.Duration
+	preferSameZone             bool
 }
 
 func parseFlags() CmdConfig {
@@ -113,6 +114,7 @@ func parseFlags() CmdConfig {
 	flag.DurationVar(&config.ResyncPeriod, "resync-period", defaultResyncPeriod, "The default resync period")
 	flag.BoolVar(&config.skipExtraWaitForNewPod, "skip-extra-wait-for-new-pod", false, "Skip including an extra wait when there is a new pod")
 	flag.DurationVar(&config.waitToDrain, "wait-to-drain", defaultWaitToDrain, "The default wait period before a terminating pods gets removed from the hashring")
+	flag.BoolVar(&config.preferSameZone, "prefer-same-zone", false, "Include the prefer same zone in the endpoint hashring")
 	flag.Parse()
 
 	return config
@@ -180,6 +182,7 @@ func main() {
 			resyncPeriod:               config.ResyncPeriod,
 			skipExtraWaitForNewPod:     config.skipExtraWaitForNewPod,
 			waitToDrain:                config.waitToDrain,
+			preferSameZone:             config.preferSameZone,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -223,6 +226,28 @@ func main() {
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+// HashringConfig is a custom struct that normally
+// comes from the thanos codebase.
+// HashringConfig represents the configuration for a hashring
+// a receive node knows about.
+type HashringConfig struct {
+	Hashring       string                    `json:"hashring,omitempty"`
+	Tenants        []string                  `json:"tenants,omitempty"`
+	Endpoints      []Endpoint                `json:"endpoints"`
+	Algorithm      receive.HashringAlgorithm `json:"algorithm,omitempty"`
+	ExternalLabels map[string]string         `json:"external_labels,omitempty"`
+}
+
+// Endpoint is a custom struct that normally
+// comes from the thanos codebase, but is copied here
+// since prefer_same_zone is not included yet in the main
+// codebase
+type Endpoint struct {
+	Address        string `json:"address"`
+	AZ             string `json:"az"`
+	PreferSameZone bool   `json:"prefer_same_zone"`
 }
 
 type prometheusReflectorMetrics struct {
@@ -371,6 +396,7 @@ type options struct {
 	resyncPeriod               time.Duration
 	skipExtraWaitForNewPod     bool
 	waitToDrain                time.Duration
+	preferSameZone             bool
 }
 
 type controller struct {
@@ -575,7 +601,7 @@ func (c *controller) sync(ctx context.Context) {
 		level.Error(c.logger).Log("msg", "failed type assertion from expected ConfigMap")
 	}
 
-	var hashrings []receive.HashringConfig
+	var hashrings []HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
 		c.reconcileErrors.WithLabelValues(decode).Inc()
 		level.Warn(c.logger).Log("msg", "failed to decode configuration", "err", err)
@@ -635,7 +661,7 @@ func (c *controller) sync(ctx context.Context) {
 		level.Warn(c.logger).Log("msg", "could not find a statefulset with the label key "+hashringLabelKey)
 	}
 
-	c.populate(ctx, hashrings, statefulsets)
+	c.populate(ctx, hashrings, statefulsets, c.options.preferSameZone)
 	level.Info(c.logger).Log("msg", "hashring populated", "hashring", fmt.Sprintf("%+v", hashrings))
 
 	err = c.saveHashring(ctx, hashrings, cm)
@@ -681,7 +707,7 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string][]*appsv1.StatefulSet) {
+func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, statefulsets map[string][]*appsv1.StatefulSet, preferSameZone bool) {
 	for i, h := range hashrings {
 		stsList, exists := statefulsets[h.Hashring]
 
@@ -689,7 +715,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 			continue
 		}
 
-		var endpoints []receive.Endpoint
+		var endpoints []Endpoint
 
 		for _, sts := range stsList {
 
@@ -740,7 +766,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
-					endpoint := *c.populateEndpoint(sts, k, err, &pod)
+					endpoint := *c.populateEndpoint(sts, k, err, &pod, preferSameZone)
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
@@ -774,7 +800,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
-					endpoint := *c.populateEndpoint(sts, i, err, pod)
+					endpoint := *c.populateEndpoint(sts, i, err, pod, preferSameZone)
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
@@ -788,14 +814,14 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 	}
 }
 
-func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod) *receive.Endpoint {
+func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod, preferSameZone bool) *Endpoint {
 	// If cluster domain is empty string we don't want dot after svc.
 	clusterDomain := ""
 	if c.options.clusterDomain != "" {
 		clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
 	}
 
-	endpoint := receive.Endpoint{
+	endpoint := Endpoint{
 		Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
 			sts.Name,
 			podIndex,
@@ -817,12 +843,16 @@ func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err
 				endpoint.AZ = annotationValue
 			}
 		}
+
+		if preferSameZone {
+			endpoint.PreferSameZone = true
+		}
 	}
 
 	return &endpoint
 }
 
-func (c *controller) saveHashring(ctx context.Context, hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
+func (c *controller) saveHashring(ctx context.Context, hashring []HashringConfig, orgCM *corev1.ConfigMap) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
 		return err
