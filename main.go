@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	stdlog "log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -87,6 +88,7 @@ type CmdConfig struct {
 	skipExtraWaitForNewPod     bool
 	waitToDrain                time.Duration
 	preferSameZone             bool
+	zonesConfigMapName         string
 }
 
 func parseFlags() CmdConfig {
@@ -115,6 +117,7 @@ func parseFlags() CmdConfig {
 	flag.BoolVar(&config.skipExtraWaitForNewPod, "skip-extra-wait-for-new-pod", false, "Skip including an extra wait when there is a new pod")
 	flag.DurationVar(&config.waitToDrain, "wait-to-drain", defaultWaitToDrain, "The default wait period before a terminating pods gets removed from the hashring")
 	flag.BoolVar(&config.preferSameZone, "prefer-same-zone", false, "Include the prefer same zone in the endpoint hashring")
+	flag.StringVar(&config.zonesConfigMapName, "zones-configmap-name", "", "The configmap with details on which subnets ip ranges correspond to which availability-zones")
 	flag.Parse()
 
 	return config
@@ -183,6 +186,7 @@ func main() {
 			skipExtraWaitForNewPod:     config.skipExtraWaitForNewPod,
 			waitToDrain:                config.waitToDrain,
 			preferSameZone:             config.preferSameZone,
+			zonesConfigMapName:         config.zonesConfigMapName,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -226,6 +230,13 @@ func main() {
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+// Zone is a json config with an
+// Availability Zone name and a list subnet ip ranges.
+type ZoneConfig struct {
+	AvailabilityZone string   `json:"availability_zone"`
+	SubnetIPRanges   []string `json:"subnet_ip_ranges"`
 }
 
 // HashringConfig is a custom struct that normally
@@ -397,6 +408,7 @@ type options struct {
 	skipExtraWaitForNewPod     bool
 	waitToDrain                time.Duration
 	preferSameZone             bool
+	zonesConfigMapName         string
 }
 
 type controller struct {
@@ -609,6 +621,31 @@ func (c *controller) sync(ctx context.Context) {
 		return
 	}
 
+	var zonesConfig []ZoneConfig
+
+	if c.options.zonesConfigMapName != "" {
+		zConfigMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.zonesConfigMapName))
+
+		if !ok || err != nil {
+			c.reconcileErrors.WithLabelValues(fetch).Inc()
+			level.Warn(c.logger).Log("msg", "could not fetch Zones ConfigMap", "err", err, "zonesConfigMapName", c.options.zonesConfigMapName)
+			return
+		}
+
+		zonesConfigMap, ok := zConfigMap.(*corev1.ConfigMap)
+		if !ok {
+			level.Error(c.logger).Log("msg", "failed type assertion from expected ZonesConfigMap")
+		}
+
+		err = json.Unmarshal([]byte(zonesConfigMap.Data["config"]), &zonesConfig)
+		if err != nil {
+			c.reconcileErrors.WithLabelValues(decode).Inc()
+			level.Warn(c.logger).Log("msg", "failed to decode zones configmap configuration", "err", err)
+
+			return
+		}
+	}
+
 	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
 	var matchingStatefulSet bool
@@ -661,7 +698,7 @@ func (c *controller) sync(ctx context.Context) {
 		level.Warn(c.logger).Log("msg", "could not find a statefulset with the label key "+hashringLabelKey)
 	}
 
-	c.populate(ctx, hashrings, statefulsets, c.options.preferSameZone)
+	c.populate(ctx, hashrings, statefulsets, zonesConfig, c.options.preferSameZone)
 	level.Info(c.logger).Log("msg", "hashring populated", "hashring", fmt.Sprintf("%+v", hashrings))
 
 	err = c.saveHashring(ctx, hashrings, cm)
@@ -707,7 +744,7 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, statefulsets map[string][]*appsv1.StatefulSet, preferSameZone bool) {
+func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, statefulsets map[string][]*appsv1.StatefulSet, zonesConfig []ZoneConfig, preferSameZone bool) {
 	for i, h := range hashrings {
 		stsList, exists := statefulsets[h.Hashring]
 
@@ -766,7 +803,7 @@ func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, s
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
-					endpoint := *c.populateEndpoint(sts, k, err, &pod, preferSameZone)
+					endpoint := *c.populateEndpoint(sts, k, err, &pod, zonesConfig, preferSameZone)
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
@@ -800,7 +837,7 @@ func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, s
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
-					endpoint := *c.populateEndpoint(sts, i, err, pod, preferSameZone)
+					endpoint := *c.populateEndpoint(sts, i, err, pod, zonesConfig, preferSameZone)
 					endpoints = append(endpoints, endpoint)
 
 					level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
@@ -814,7 +851,7 @@ func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, s
 	}
 }
 
-func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod, preferSameZone bool) *Endpoint {
+func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod, zonesConfig []ZoneConfig, preferSameZone bool) *Endpoint {
 	// If cluster domain is empty string we don't want dot after svc.
 	clusterDomain := ""
 	if c.options.clusterDomain != "" {
@@ -841,6 +878,26 @@ func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err
 			annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
 			if ok {
 				endpoint.AZ = annotationValue
+			}
+		}
+
+		// Check if pod ip is in a particular availability zone
+		// If the pod ip is contained in a subnet's CIDR block range,
+		// then use set it to use that availability zone.
+		if len(zonesConfig) > 0 {
+			ip := pod.Status.HostIP
+			ipAddress := net.ParseIP(ip)
+			if ipAddress != nil {
+				for _, z := range zonesConfig {
+					for _, subnet := range z.SubnetIPRanges {
+						_, cidr, parseErr := net.ParseCIDR(subnet)
+						if parseErr == nil {
+							if cidr.Contains(ipAddress) {
+								endpoint.AZ = z.AvailabilityZone
+							}
+						}
+					}
+				}
 			}
 		}
 

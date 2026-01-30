@@ -9,6 +9,16 @@ This is a fork of the `thanos-receive-controller` tool. It has the following cha
 * `skip-extra-wait-for-new-pod` - flag to allow skipping an unnecessary wait condition
 * `wait-to-drain` - flag to allow waiting a specific amount of time before draining a pod from the hashring configmap
 * `prefer-same-zone` - flag to allow including the `prefer_same_zone` in the hashring config. If this is enabled, this will instruct `thanos-receive` to replicate data to pods in the same zone
+* `zones-configmap-name` - flag to specify a zones configmap name. This is a configmap with a list of availablity zones and their associated subnet cidr ip ranges. This can be used to identify a pod's availability zone based on the subnet. Below is the example config map
+```
+apiVersion: v1
+data:
+  config: '[{"availability_zone":"us-east-1a","subnet_ip_ranges":["172.31.0.0/18"]},{"availability_zone":"us-east-1b", "subnet_ip_ranges": ["172.31.64.0/18"]},{"availability_zone":"us-east-1c", "subnet_ip_ranges": ["172.31.128.0/18"]}]'
+kind: ConfigMap
+metadata:
+  name: thanos-receive-controller-zones-config
+```
+
 
 # Thanos Receive Controller
 
