@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/thanos-io/thanos/pkg/receive"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,10 +27,10 @@ func TestController(t *testing.T) {
 
 	for _, tt := range []struct {
 		name          string
-		hashrings     []receive.HashringConfig
+		hashrings     []HashringConfig
 		statefulsets  []*appsv1.StatefulSet
 		clusterDomain string
-		expected      []receive.HashringConfig
+		expected      []HashringConfig
 	}{
 		{
 			name:     "Empty",
@@ -39,15 +38,15 @@ func TestController(t *testing.T) {
 		},
 		{
 			name: "OneHashringNoStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 			}},
 			clusterDomain: "cluster.local",
-			expected:      []receive.HashringConfig{{Hashring: "hashring0"}},
+			expected:      []HashringConfig{{Hashring: "hashring0"}},
 		},
 		{
 			name: "OneHashringOneStatefulSetNoMatch",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -64,14 +63,14 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
 		},
 		{
 			name: "OneHashringOneStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -91,10 +90,10 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{Address: "thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901"},
 					{Address: "thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:10901"},
 					{Address: "thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:10901"},
@@ -103,7 +102,7 @@ func TestController(t *testing.T) {
 		},
 		{
 			name: "OneHashringOneStatefulSetOneBadStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -136,10 +135,10 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{Address: "hashring0-0.h0.namespace.svc.cluster.local:10901"},
 					{Address: "hashring0-1.h0.namespace.svc.cluster.local:10901"},
 					{Address: "hashring0-2.h0.namespace.svc.cluster.local:10901"},
@@ -148,7 +147,7 @@ func TestController(t *testing.T) {
 		},
 		{
 			name: "OneHashringManyStatefulSets",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}, {
@@ -183,17 +182,17 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{Address: "hashring0-0.h0.namespace.svc.cluster.local:10901"},
 					{Address: "hashring0-1.h0.namespace.svc.cluster.local:10901"},
 					{Address: "hashring0-2.h0.namespace.svc.cluster.local:10901"},
 				},
 			}, {
 				Hashring: "hashring1",
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{Address: "hashring1-0.h1.namespace.svc.cluster.local:10901"},
 					{Address: "hashring1-1.h1.namespace.svc.cluster.local:10901"},
 				},
@@ -201,7 +200,7 @@ func TestController(t *testing.T) {
 		},
 		{
 			name: "OneHashringLabelKeyManyStatefulSets",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -234,11 +233,11 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{
+			expected: []HashringConfig{
 				{
 					Hashring: "hashring0",
 					Tenants:  []string{"foo", "bar"},
-					Endpoints: []receive.Endpoint{
+					Endpoints: []Endpoint{
 						{Address: "hashring0-0.h0.namespace.svc.cluster.local:10901"},
 						{Address: "hashring0-1.h0.namespace.svc.cluster.local:10901"},
 						{Address: "hashring0-2.h0.namespace.svc.cluster.local:10901"},
@@ -251,7 +250,7 @@ func TestController(t *testing.T) {
 		{
 			clusterDomain: "",
 			name:          "OneHashringOneStatefulSetNoClusterDomain",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring1",
 				Tenants:  []string{"fooo", "bar"},
 			}},
@@ -270,10 +269,10 @@ func TestController(t *testing.T) {
 					},
 				},
 			},
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring1",
 				Tenants:  []string{"fooo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{Address: "thanos-receive-hashring1-0.h0.namespace.svc:10901"},
 					{Address: "thanos-receive-hashring1-1.h0.namespace.svc:10901"},
 					{Address: "thanos-receive-hashring1-2.h0.namespace.svc:10901"},
@@ -327,10 +326,10 @@ func TestController(t *testing.T) {
 func TestControllerConfigmapUpdate(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
-	originalHashrings := []receive.HashringConfig{{
+	originalHashrings := []HashringConfig{{
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
-		Endpoints: []receive.Endpoint{
+		Endpoints: []Endpoint{
 			{Address: "thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901"},
 			{Address: "thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:10901"},
 			{Address: "thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:10901"},
@@ -342,13 +341,13 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 
 	for _, tt := range []struct {
 		name            string
-		hashrings       []receive.HashringConfig
+		hashrings       []HashringConfig
 		labels          map[string]string
 		shouldBeUpdated bool
 	}{
 		{
 			name: "DifferentHashring",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
 			}},
@@ -448,11 +447,12 @@ func TestControllerWithAzAware(t *testing.T) {
 	port := 10901
 
 	for _, tt := range []struct {
-		name          string
-		hashrings     []receive.HashringConfig
-		statefulsets  []*appsv1.StatefulSet
-		clusterDomain string
-		expected      []receive.HashringConfig
+		name           string
+		hashrings      []HashringConfig
+		statefulsets   []*appsv1.StatefulSet
+		clusterDomain  string
+		expected       []HashringConfig
+		preferSameZone bool
 	}{
 		{
 			name:     "Empty",
@@ -460,15 +460,15 @@ func TestControllerWithAzAware(t *testing.T) {
 		},
 		{
 			name: "OneHashringNoStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 			}},
 			clusterDomain: "cluster.local",
-			expected:      []receive.HashringConfig{{Hashring: "hashring0"}},
+			expected:      []HashringConfig{{Hashring: "hashring0"}},
 		},
 		{
 			name: "OneHashringOneStatefulSetNoMatch",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -485,14 +485,14 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
 		},
 		{
 			name: "OneHashringOneStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -512,10 +512,10 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{
 						Address: "thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901",
 						AZ:      "thanos-receive-hashring0",
@@ -533,7 +533,7 @@ func TestControllerWithAzAware(t *testing.T) {
 		},
 		{
 			name: "OneHashringOneStatefulSetOneBadStatefulSet",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -566,10 +566,10 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{
 						Address: "hashring0-0.h0.namespace.svc.cluster.local:10901",
 						AZ:      "hashring0",
@@ -587,7 +587,7 @@ func TestControllerWithAzAware(t *testing.T) {
 		},
 		{
 			name: "OneHashringManyStatefulSets",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}, {
@@ -622,10 +622,10 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{
 						Address: "hashring0-0.h0.namespace.svc.cluster.local:10901",
 						AZ:      "hashring0",
@@ -641,7 +641,7 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			}, {
 				Hashring: "hashring1",
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{
 						Address: "hashring1-0.h1.namespace.svc.cluster.local:10901",
 						AZ:      "hashring1",
@@ -655,7 +655,7 @@ func TestControllerWithAzAware(t *testing.T) {
 		},
 		{
 			name: "OneHashringLabelKeyManyStatefulSets",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 			}},
@@ -688,11 +688,11 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{
+			expected: []HashringConfig{
 				{
 					Hashring: "hashring0",
 					Tenants:  []string{"foo", "bar"},
-					Endpoints: []receive.Endpoint{
+					Endpoints: []Endpoint{
 						{
 							Address: "hashring0-0.h0.namespace.svc.cluster.local:10901",
 							AZ:      "hashring0",
@@ -720,7 +720,7 @@ func TestControllerWithAzAware(t *testing.T) {
 		{
 			clusterDomain: "",
 			name:          "OneHashringOneStatefulSetNoClusterDomain",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring1",
 				Tenants:  []string{"fooo", "bar"},
 			}},
@@ -739,10 +739,10 @@ func TestControllerWithAzAware(t *testing.T) {
 					},
 				},
 			},
-			expected: []receive.HashringConfig{{
+			expected: []HashringConfig{{
 				Hashring: "hashring1",
 				Tenants:  []string{"fooo", "bar"},
-				Endpoints: []receive.Endpoint{
+				Endpoints: []Endpoint{
 					{
 						Address: "thanos-receive-hashring1-0.h0.namespace.svc:10901",
 						AZ:      "thanos-receive-hashring1",
@@ -758,12 +758,58 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			}},
 		},
+		{
+			clusterDomain: "",
+			name:          "OneHashringOneStatefulSetNoClusterDomainPreferSameZone",
+			hashrings: []HashringConfig{{
+				Hashring: "hashring1",
+				Tenants:  []string{"fooo", "bar"},
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "thanos-receive-hashring1",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring1",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
+					},
+				},
+			},
+			preferSameZone: true,
+			expected: []HashringConfig{{
+				Hashring: "hashring1",
+				Tenants:  []string{"fooo", "bar"},
+				Endpoints: []Endpoint{
+					{
+						Address:        "thanos-receive-hashring1-0.h0.namespace.svc:10901",
+						AZ:             "thanos-receive-hashring1",
+						PreferSameZone: true,
+					},
+					{
+						Address:        "thanos-receive-hashring1-1.h0.namespace.svc:10901",
+						AZ:             "thanos-receive-hashring1",
+						PreferSameZone: true,
+					},
+					{
+						Address:        "thanos-receive-hashring1-2.h0.namespace.svc:10901",
+						AZ:             "thanos-receive-hashring1",
+						PreferSameZone: true,
+					},
+				},
+			}},
+		},
 	} {
 		name := tt.name
 		hashrings := tt.hashrings
 		statefulsets := tt.statefulsets
 		expected := tt.expected
 		clusterDomain := tt.clusterDomain
+		preferSameZone := tt.preferSameZone
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
@@ -777,6 +823,7 @@ func TestControllerWithAzAware(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
+				preferSameZone:         preferSameZone,
 			}
 			klient := fake.NewSimpleClientset()
 			cleanUp := setupController(ctx, t, klient, opts)
@@ -806,10 +853,10 @@ func TestControllerWithAzAware(t *testing.T) {
 func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
-	originalHashrings := []receive.HashringConfig{{
+	originalHashrings := []HashringConfig{{
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
-		Endpoints: []receive.Endpoint{
+		Endpoints: []Endpoint{
 			{
 				Address: "thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901",
 				AZ:      "thanos-receive-hashring0",
@@ -830,13 +877,13 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 
 	for _, tt := range []struct {
 		name            string
-		hashrings       []receive.HashringConfig
+		hashrings       []HashringConfig
 		labels          map[string]string
 		shouldBeUpdated bool
 	}{
 		{
 			name: "DifferentHashring",
-			hashrings: []receive.HashringConfig{{
+			hashrings: []HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
 			}},
@@ -954,7 +1001,7 @@ func createInitialResources(
 	t *testing.T,
 	klient kubernetes.Interface,
 	opts *options,
-	hashrings []receive.HashringConfig,
+	hashrings []HashringConfig,
 	statefulsets []*appsv1.StatefulSet,
 ) *corev1.ConfigMap {
 	t.Helper()
