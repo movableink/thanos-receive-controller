@@ -86,7 +86,6 @@ type CmdConfig struct {
 	uniqueStatefulSetPodLabels bool
 	ResyncPeriod               time.Duration
 	skipExtraWaitForNewPod     bool
-	waitToDrain                time.Duration
 	preferSameZone             bool
 	zonesConfigMapName         string
 }
@@ -115,7 +114,6 @@ func parseFlags() CmdConfig {
 	flag.BoolVar(&config.uniqueStatefulSetPodLabels, "unique-statefulset-pod-labels", false, "Get list of pods in statefulset using pod spec labels")
 	flag.DurationVar(&config.ResyncPeriod, "resync-period", defaultResyncPeriod, "The default resync period")
 	flag.BoolVar(&config.skipExtraWaitForNewPod, "skip-extra-wait-for-new-pod", false, "Skip including an extra wait when there is a new pod")
-	flag.DurationVar(&config.waitToDrain, "wait-to-drain", defaultWaitToDrain, "The default wait period before a terminating pods gets removed from the hashring")
 	flag.BoolVar(&config.preferSameZone, "prefer-same-zone", false, "Include the prefer same zone in the endpoint hashring")
 	flag.StringVar(&config.zonesConfigMapName, "zones-configmap-name", "", "The configmap with details on which subnets ip ranges correspond to which availability-zones")
 	flag.Parse()
@@ -184,7 +182,6 @@ func main() {
 			uniqueStatefulSetPodLabels: config.uniqueStatefulSetPodLabels,
 			resyncPeriod:               config.ResyncPeriod,
 			skipExtraWaitForNewPod:     config.skipExtraWaitForNewPod,
-			waitToDrain:                config.waitToDrain,
 			preferSameZone:             config.preferSameZone,
 			zonesConfigMapName:         config.zonesConfigMapName,
 		}
@@ -406,7 +403,6 @@ type options struct {
 	uniqueStatefulSetPodLabels bool
 	resyncPeriod               time.Duration
 	skipExtraWaitForNewPod     bool
-	waitToDrain                time.Duration
 	preferSameZone             bool
 	zonesConfigMapName         string
 }
@@ -788,18 +784,12 @@ func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, s
 							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", pod.Name)
 							continue
 						}
-
-						if pod.ObjectMeta.DeletionTimestamp != nil {
-							if (time.Now().Unix() - pod.ObjectMeta.DeletionTimestamp.Time.Unix()) > int64(c.options.waitToDrain.Seconds()) {
-								if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-									// Pod is terminating, do not add it to the hashring.
-									level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
-									continue
-								}
-							} else {
-								level.Warn(c.logger).Log("msg", "keeping pod in the hashring even though it is terminating because it is draining", "pod", pod.Name)
-							}
+						if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+							// Pod is terminating, do not add it to the hashring.
+							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
+							continue
 						}
+
 					}
 					// If cluster domain is empty string we don't want dot after svc.
 
@@ -823,16 +813,10 @@ func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, s
 							continue
 						}
 
-						if pod.ObjectMeta.DeletionTimestamp != nil {
-							if (time.Now().Unix() - pod.ObjectMeta.DeletionTimestamp.Time.Unix()) > int64(c.options.waitToDrain.Seconds()) {
-								if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-									// Pod is terminating, do not add it to the hashring.
-									level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
-									continue
-								}
-							} else {
-								level.Warn(c.logger).Log("msg", "keeping pod in the hashring even though it is terminating because it is draining", "pod", pod.Name)
-							}
+						if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+							// Pod is terminating, do not add it to the hashring.
+							level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod is terminating", "pod", pod.Name)
+							continue
 						}
 					}
 					// If cluster domain is empty string we don't want dot after svc.
