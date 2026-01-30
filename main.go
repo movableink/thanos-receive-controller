@@ -737,7 +737,6 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 func (c *controller) populate(ctx context.Context, hashrings []HashringConfig, statefulsets map[string][]*appsv1.StatefulSet, zonesConfig []ZoneConfig, preferSameZone bool) {
 	for i, h := range hashrings {
 		stsList, exists := statefulsets[h.Hashring]
-
 		if !exists {
 			continue
 		}
