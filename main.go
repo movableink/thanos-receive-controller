@@ -251,7 +251,7 @@ type HashringConfig struct {
 type Endpoint struct {
 	Address        string `json:"address"`
 	AZ             string `json:"az"`
-	PreferSameZone bool   `json:"prefer_same_zone"`
+	PreferSameZone bool   `json:"prefer_same_zone,omitempty"`
 }
 
 type prometheusReflectorMetrics struct {
@@ -636,10 +636,7 @@ func (c *controller) sync(ctx context.Context) {
 			return
 		}
 
-		level.Info(c.logger).Log(string(zonesConfig[0].AvailabilityZone))
 	}
-
-	level.Info(c.logger).Log("preferSameZone:" + strconv.FormatBool(c.options.preferSameZone))
 
 	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
