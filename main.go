@@ -50,7 +50,6 @@ const (
 	defaultResyncPeriod           = 5 * time.Minute
 	resyncPeriod                  = 5 * time.Minute
 	defaultScaleTimeout           = 5 * time.Second
-	defaultWaitToDrain            = 0 * time.Second
 	internalServerShutdownTimeout = time.Second
 	hashringLabelKey              = "controller.receive.thanos.io/hashring"
 
@@ -85,7 +84,6 @@ type CmdConfig struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	ResyncPeriod               time.Duration
-	skipExtraWaitForNewPod     bool
 	preferSameZone             bool
 	zonesConfigMapName         string
 }
@@ -113,7 +111,6 @@ func parseFlags() CmdConfig {
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
 	flag.BoolVar(&config.uniqueStatefulSetPodLabels, "unique-statefulset-pod-labels", false, "Get list of pods in statefulset using pod spec labels")
 	flag.DurationVar(&config.ResyncPeriod, "resync-period", defaultResyncPeriod, "The default resync period")
-	flag.BoolVar(&config.skipExtraWaitForNewPod, "skip-extra-wait-for-new-pod", false, "Skip including an extra wait when there is a new pod")
 	flag.BoolVar(&config.preferSameZone, "prefer-same-zone", false, "Include the prefer same zone in the endpoint hashring")
 	flag.StringVar(&config.zonesConfigMapName, "zones-configmap-name", "", "The configmap with details on which subnets ip ranges correspond to which availability-zones")
 	flag.Parse()
@@ -181,7 +178,6 @@ func main() {
 			podAzAnnotationKey:         config.podAzAnnotationKey,
 			uniqueStatefulSetPodLabels: config.uniqueStatefulSetPodLabels,
 			resyncPeriod:               config.ResyncPeriod,
-			skipExtraWaitForNewPod:     config.skipExtraWaitForNewPod,
 			preferSameZone:             config.preferSameZone,
 			zonesConfigMapName:         config.zonesConfigMapName,
 		}
@@ -402,7 +398,6 @@ type options struct {
 	podAzAnnotationKey         string
 	uniqueStatefulSetPodLabels bool
 	resyncPeriod               time.Duration
-	skipExtraWaitForNewPod     bool
 	preferSameZone             bool
 	zonesConfigMapName         string
 }
@@ -640,7 +635,11 @@ func (c *controller) sync(ctx context.Context) {
 
 			return
 		}
+
+		level.Info(c.logger).Log(string(zonesConfig[0].AvailabilityZone))
 	}
+
+	level.Info(c.logger).Log("preferSameZone:" + strconv.FormatBool(c.options.preferSameZone))
 
 	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
@@ -660,21 +659,19 @@ func (c *controller) sync(ctx context.Context) {
 			matchingStatefulSet = true
 		}
 
-		if !c.options.skipExtraWaitForNewPod {
-			// If there's an increase in replicas we poll for the new replicas to be ready
-			if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
-				// Iterate over new replicas to wait until they are running
-				for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
-					start := time.Now()
-					podName := fmt.Sprintf("%s-%d", sts.Name, i)
+		// If there's an increase in replicas we poll for the new replicas to be ready
+		if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
+			// Iterate over new replicas to wait until they are running
+			for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
+				start := time.Now()
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
-					if err := c.waitForPod(ctx, podName); err != nil {
-						level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-						return
-					}
-
-					level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
+				if err := c.waitForPod(ctx, podName); err != nil {
+					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
+					return
 				}
+
+				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 			}
 		}
 
